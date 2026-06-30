@@ -1,13 +1,7 @@
 {
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    }
-  ],
+  "buildCommand": "pnpm build",
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/(.*)",
