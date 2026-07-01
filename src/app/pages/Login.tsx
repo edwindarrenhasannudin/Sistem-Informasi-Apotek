@@ -72,8 +72,8 @@ export function Login() {
       const result = await register(regName.trim(), regUsername.trim(), regPassword, regRole);
       if (result === 'USERNAME_TAKEN') {
         setRegError('Username sudah digunakan, coba yang lain.');
-      } else if (result === 'ERROR') {
-        setRegError('Gagal membuat akun. Coba lagi.');
+      } else if (result !== 'SUCCESS') {
+        setRegError(result); // Tampilkan pesan error asli dari Supabase
       } else {
         setRegSuccess(true);
       }

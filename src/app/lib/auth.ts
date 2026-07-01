@@ -10,7 +10,7 @@ export interface User {
 
 // Login menggunakan Supabase Auth (email = username@apotek.local)
 export const login = async (username: string, password: string): Promise<User | null> => {
-  const email = `${username.trim().toLowerCase()}@apotek.local`;
+  const email = `${username.trim().toLowerCase()}@apotek.com`;
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) return null;
 
@@ -33,7 +33,7 @@ export const register = async (
   password: string,
   role: 'admin' | 'kasir'
 ): Promise<RegisterError> => {
-  const email = `${username.trim().toLowerCase()}@apotek.local`;
+  const email = `${username.trim().toLowerCase()}@apotek.com`;
   const { error } = await supabase.auth.signUp({
     email,
     password,
@@ -43,8 +43,9 @@ export const register = async (
   });
 
   if (error) {
+    console.error('Supabase signup error:', error);
     if (error.message.toLowerCase().includes('already registered')) return 'USERNAME_TAKEN';
-    return 'ERROR';
+    return error.message as any; // return exact error message for debugging
   }
   return 'SUCCESS';
 };
