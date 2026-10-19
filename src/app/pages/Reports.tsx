@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import type ExcelJS from 'exceljs';
 import { getMedicines, getTransactions } from '../lib/store';
+import type { Medicine, Transaction } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import {
   Table,
@@ -21,11 +23,81 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { TrendingUp, Package, DollarSign, ShoppingBag, Loader2 } from 'lucide-react';
+import { TrendingUp, Package, DollarSign, ShoppingBag, Loader2, Download, FileSpreadsheet } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { toast } from 'sonner';
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'];
+const REPORT_HEADER_ROW = 5;
+const REPORT_SHEET_COLOR = '1E3A5F';
+const RUPIAH_FORMAT = '"Rp" #,##0';
+const WORKBOOK_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+function addReportSheet(
+  workbook: ExcelJS.Workbook,
+  name: string,
+  title: string,
+  subtitle: string,
+  headers: string[],
+  widths: number[]
+) {
+  const worksheet = workbook.addWorksheet(name);
+  const lastColumn = headers.length;
+
+  worksheet.columns = headers.map((header, index) => ({
+    header,
+    key: `column${index + 1}`,
+    width: widths[index],
+  }));
+  worksheet.mergeCells(1, 1, 1, lastColumn);
+  worksheet.mergeCells(2, 1, 2, lastColumn);
+  worksheet.getCell(1, 1).value = title;
+  worksheet.getCell(2, 1).value = subtitle;
+  worksheet.getRow(1).height = 30;
+  worksheet.getRow(2).height = 22;
+  worksheet.getRow(3).height = 8;
+  worksheet.getRow(4).height = 8;
+  worksheet.getRow(REPORT_HEADER_ROW).values = headers;
+
+  worksheet.getCell(1, 1).font = { name: 'Aptos Display', size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+  worksheet.getCell(1, 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: REPORT_SHEET_COLOR } };
+  worksheet.getCell(1, 1).alignment = { vertical: 'middle' };
+  worksheet.getCell(2, 1).font = { name: 'Aptos', size: 10, color: { argb: 'FF64748B' }, italic: true };
+  worksheet.getRow(REPORT_HEADER_ROW).height = 24;
+  worksheet.getRow(REPORT_HEADER_ROW).eachCell(cell => {
+    cell.font = { name: 'Aptos', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: REPORT_SHEET_COLOR } };
+    cell.alignment = { vertical: 'middle', horizontal: 'left' };
+    cell.border = { bottom: { style: 'thin', color: { argb: 'FFCBD5E1' } } };
+  });
+  worksheet.views = [{ state: 'frozen', ySplit: REPORT_HEADER_ROW }];
+  worksheet.autoFilter = {
+    from: { row: REPORT_HEADER_ROW, column: 1 },
+    to: { row: REPORT_HEADER_ROW, column: lastColumn },
+  };
+  worksheet.pageSetup = {
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+  };
+  return worksheet;
+}
+
+function styleReportRows(worksheet: ExcelJS.Worksheet) {
+  for (let rowNumber = REPORT_HEADER_ROW + 1; rowNumber <= worksheet.rowCount; rowNumber++) {
+    const row = worksheet.getRow(rowNumber);
+    row.height = 21;
+    row.eachCell(cell => {
+      cell.font = { name: 'Aptos', size: 10, color: { argb: 'FF1E293B' } };
+      cell.alignment = { vertical: 'middle' };
+      cell.border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } };
+      if ((rowNumber - REPORT_HEADER_ROW) % 2 === 0) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+      }
+    });
+  }
+}
 
 export function Reports() {
   const [monthlySales, setMonthlySales] = useState(0);
@@ -33,7 +105,10 @@ export function Reports() {
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [categoryData, setCategoryData] = useState<any[]>([]);
   const [revenueByCategory, setRevenueByCategory] = useState<any[]>([]);
+  const [medicines, setMedicines] = useState<Medicine[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     loadReports();
@@ -46,6 +121,8 @@ export function Reports() {
         getMedicines(),
         getTransactions(),
       ]);
+      setMedicines(medicines);
+      setTransactions(transactions);
 
       // Current month range
       const now = new Date();
@@ -126,6 +203,119 @@ export function Reports() {
     }
   };
 
+  const exportExcel = async () => {
+    setIsExporting(true);
+    try {
+      const { default: ExcelJS } = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      const generatedAt = new Date();
+      const monthLabel = format(generatedAt, 'MMMM yyyy');
+      workbook.creator = 'Apotek Sehat';
+      workbook.created = generatedAt;
+      workbook.subject = 'Laporan penjualan dan inventori apotek';
+      workbook.title = `Laporan Apotek - ${monthLabel}`;
+      workbook.company = 'Apotek Sehat';
+
+      const summarySheet = addReportSheet(
+        workbook,
+        'Ringkasan',
+        'LAPORAN APOTEK SEHAT',
+        `Ringkasan kinerja dan inventori · ${monthLabel} · Dibuat ${format(generatedAt, 'dd/MM/yyyy HH:mm')}`,
+        ['Indikator', 'Nilai'],
+        [38, 26]
+      );
+      const totalInventoryValue = medicines.reduce((sum, medicine) => sum + medicine.stock * medicine.price, 0);
+      summarySheet.addRows([
+        ['Penjualan bulan ini', monthlySales],
+        ['Transaksi bulan ini', monthlyTransactions],
+        ['Jumlah produk terdaftar', medicines.length],
+        ['Nilai total inventori', totalInventoryValue],
+        ['Produk dalam daftar terlaris', topProducts.length],
+      ]);
+      summarySheet.getCell(REPORT_HEADER_ROW + 1, 2).numFmt = RUPIAH_FORMAT;
+      summarySheet.getCell(REPORT_HEADER_ROW + 4, 2).numFmt = RUPIAH_FORMAT;
+      styleReportRows(summarySheet);
+
+      const productSheet = addReportSheet(
+        workbook,
+        'Produk Terlaris',
+        'PRODUK TERLARIS',
+        '10 produk dengan pendapatan tertinggi dari seluruh transaksi',
+        ['Peringkat', 'Nama obat', 'Jumlah terjual', 'Pendapatan'],
+        [14, 36, 20, 24]
+      );
+      productSheet.addRows(topProducts.map((product, index) => [
+        index + 1,
+        product.name,
+        product.quantity,
+        product.revenue,
+      ]));
+      productSheet.getColumn(4).numFmt = RUPIAH_FORMAT;
+      styleReportRows(productSheet);
+
+      const stockSheet = addReportSheet(
+        workbook,
+        'Nilai Stok',
+        'NILAI INVENTORI PER KATEGORI',
+        'Ringkasan jumlah stok dan nilai inventori berdasarkan kategori obat',
+        ['Kategori', 'Jumlah stok', 'Nilai inventori'],
+        [34, 20, 26]
+      );
+      stockSheet.addRows(categoryData.map(category => [category.name, category.stock, category.value]));
+      stockSheet.getColumn(3).numFmt = RUPIAH_FORMAT;
+      styleReportRows(stockSheet);
+
+      const categoryRevenueSheet = addReportSheet(
+        workbook,
+        'Pendapatan Kategori',
+        'PENDAPATAN PER KATEGORI',
+        'Pendapatan kategori berdasarkan seluruh transaksi yang tercatat',
+        ['Kategori', 'Pendapatan'],
+        [36, 26]
+      );
+      categoryRevenueSheet.addRows(revenueByCategory.map(category => [category.name, category.value]));
+      categoryRevenueSheet.getColumn(2).numFmt = RUPIAH_FORMAT;
+      styleReportRows(categoryRevenueSheet);
+
+      const transactionSheet = addReportSheet(
+        workbook,
+        'Rincian Transaksi',
+        'RINCIAN TRANSAKSI',
+        'Daftar transaksi lengkap beserta ringkasan item',
+        ['Tanggal', 'ID transaksi', 'Pelanggan', 'Metode pembayaran', 'Jumlah item', 'Total transaksi', 'Rincian item'],
+        [22, 38, 26, 22, 16, 24, 60]
+      );
+      transactionSheet.addRows(transactions.map(transaction => [
+        new Date(transaction.date),
+        transaction.id,
+        transaction.customerName || 'Umum',
+        transaction.paymentMethod,
+        transaction.items.reduce((count, item) => count + item.quantity, 0),
+        transaction.total,
+        transaction.items.map(item => `${item.medicineName} (${item.quantity} x Rp ${item.price.toLocaleString('id-ID')})`).join(', '),
+      ]));
+      transactionSheet.getColumn(1).numFmt = 'dd mmm yyyy, hh:mm';
+      transactionSheet.getColumn(6).numFmt = RUPIAH_FORMAT;
+      styleReportRows(transactionSheet);
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([new Uint8Array(buffer)], { type: WORKBOOK_MIME_TYPE });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `laporan-apotek-${format(generatedAt, 'yyyy-MM')}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Laporan Excel berhasil diunduh');
+    } catch {
+      toast.error('Gagal membuat file Excel. Silakan coba lagi.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -137,9 +327,21 @@ export function Reports() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold text-gray-900">Laporan & Analisis</h2>
-        <p className="text-gray-500 mt-1">Analisis penjualan dan inventori</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900">Laporan & Analisis</h2>
+          <p className="text-gray-500 mt-1">Analisis penjualan dan inventori</p>
+        </div>
+        <button
+          type="button"
+          onClick={exportExcel}
+          disabled={isExporting}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2"
+        >
+          {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
+          {isExporting ? 'Menyiapkan Excel...' : 'Unduh Excel'}
+          {!isExporting && <Download className="h-4 w-4" />}
+        </button>
       </div>
 
       {/* Monthly Stats */}
