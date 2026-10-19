@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router';
-import { Eye, EyeOff, Pill, Lock, User, Mail, UserPlus, ArrowLeft, CheckCircle, Send, KeyRound } from 'lucide-react';
+import { Eye, EyeOff, Pill, Lock, User, Mail, UserPlus, ArrowLeft, CheckCircle, Send, KeyRound, ShieldCheck } from 'lucide-react';
 import { login, register, sendPasswordResetEmail, updatePassword } from '../lib/auth';
-import { supabase } from '../lib/supabase';
+import { isLocalMode } from '../lib/supabase';
+import { useAuth } from '../lib/authContext';
 
 type Mode = 'login' | 'register' | 'forgot-password' | 'update-password';
 
 export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { setUser } = useAuth();
   const [mode, setMode] = useState<Mode>('login');
 
   // Cek apakah ada hash #recovery (dari link email reset password)
@@ -57,6 +59,7 @@ export function Login() {
     try {
       const user = await login(loginEmail, loginPassword);
       if (user) {
+        setUser(user);
         navigate('/', { replace: true });
       } else {
         setLoginError('Email atau password salah, atau email belum dikonfirmasi.');
@@ -97,7 +100,12 @@ export function Login() {
       } else if (result !== 'SUCCESS') {
         setRegError(result); // Tampilkan pesan error asli
       } else {
-        setRegSuccess(true);
+        if (isLocalMode) {
+          setLoginEmail(regEmail.trim());
+          switchMode('login');
+        } else {
+          setRegSuccess(true);
+        }
       }
     } catch {
       setRegError('Terjadi kesalahan server.');
@@ -118,7 +126,11 @@ export function Login() {
     setResetLoading(true);
     try {
       await sendPasswordResetEmail(resetEmail.trim());
-      setResetSuccess(true);
+      if (isLocalMode) {
+        switchMode('update-password');
+      } else {
+        setResetSuccess(true);
+      }
     } catch (err: any) {
       setResetError(err.message || 'Gagal mengirim email reset.');
     } finally {
@@ -164,52 +176,80 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex bg-gray-100">
+    <div className="min-h-screen flex bg-slate-50">
       
       {/* ── BAGIAN KIRI: BACKGROUND IMAGE ── */}
       <div 
-        className="hidden lg:flex lg:w-1/2 relative bg-cover bg-center"
+        className="hidden lg:flex lg:w-[48%] xl:w-1/2 relative bg-cover bg-center"
         style={{ backgroundImage: "url('/bg-login.png')" }}
       >
-        <div className="absolute inset-0 bg-blue-900/60 mix-blend-multiply" />
-        <div className="absolute inset-0 bg-gradient-to-t from-blue-900/90 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-slate-950/35 mix-blend-multiply" />
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-950/70 via-blue-950/25 to-blue-950/75" />
         
-        <div className="relative z-10 flex flex-col justify-end p-12 text-white h-full">
-          <div className="inline-flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center">
-              <Pill className="w-6 h-6 text-white" />
+        <div className="relative z-10 flex flex-col justify-between p-10 xl:p-14 text-white w-full min-h-screen">
+          <div className="inline-flex items-center gap-3">
+            <div className="w-11 h-11 bg-white/15 border border-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center">
+              <Pill className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">Apotek Sehat</h1>
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight">Apotek Sehat</h1>
+              <p className="text-xs text-blue-100/80">Sistem Informasi Apotek</p>
+            </div>
           </div>
-          <p className="text-xl text-blue-50 max-w-lg leading-relaxed">
-            Sistem informasi manajemen apotek terpadu untuk pelayanan yang lebih cepat dan akurat.
-          </p>
+
+          <div className="max-w-xl pb-4">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium tracking-wide text-blue-50 backdrop-blur-sm">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+              PORTAL MANAJEMEN APOTEK
+            </div>
+            <h2 className="mt-6 text-4xl font-semibold leading-tight tracking-tight xl:text-5xl">
+              Kelola apotek dengan lebih mudah dan teratur.
+            </h2>
+            <p className="mt-5 max-w-lg text-base leading-7 text-blue-50/90">
+              Satu tempat untuk mengelola persediaan, transaksi, dan aktivitas apotek setiap hari.
+            </p>
+            <div className="mt-8 flex items-center gap-2 text-sm text-blue-50/90">
+              <ShieldCheck className="h-5 w-5 text-emerald-300" />
+              Akses aman untuk tim apotek Anda
+            </div>
+          </div>
+
+          <p className="text-xs text-blue-100/70">© Apotek Sehat · Sistem Informasi Apotek</p>
         </div>
       </div>
 
       {/* ── BAGIAN KANAN: FORM ── */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 bg-white">
-        <div className="w-full max-w-md">
+      <div className="w-full lg:w-[52%] xl:w-1/2 min-h-screen overflow-y-auto bg-gradient-to-br from-slate-50 via-white to-blue-50/60">
+        <div className="min-h-screen flex items-center justify-center p-5 sm:p-8 lg:p-10">
+        <div className="w-full max-w-md rounded-3xl border border-slate-200/80 bg-white p-6 shadow-xl shadow-slate-900/[0.04] sm:p-9">
 
           {/* Header Mobile Only */}
-          <div className="lg:hidden text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl shadow-lg mb-4">
-              <Pill className="w-8 h-8 text-white" />
+          <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
+            <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-700 rounded-2xl shadow-lg shadow-blue-900/15">
+              <Pill className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Apotek Sehat</h1>
-            <p className="text-gray-500 text-sm mt-1">Sistem Informasi Apotek</p>
+            <div className="text-left">
+              <h1 className="text-lg font-bold text-gray-900">Apotek Sehat</h1>
+              <p className="text-gray-500 text-xs mt-0.5">Sistem Informasi Apotek</p>
+            </div>
           </div>
 
 
           {/* ── LOGIN FORM ── */}
           {mode === 'login' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Selamat Datang 👋</h2>
-              <p className="text-gray-500 mb-8">Silakan masuk menggunakan email Anda.</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700 mb-3">Selamat datang kembali</p>
+              <h2 className="text-3xl font-bold tracking-tight text-slate-900 mb-2">Masuk ke akun Anda</h2>
+              <p className="text-sm leading-6 text-slate-500 mb-8">Gunakan email dan kata sandi untuk melanjutkan ke sistem apotek.</p>
+              {isLocalMode && (
+                <p className="text-sm text-blue-800 border border-blue-100 bg-blue-50/80 rounded-xl px-4 py-3 mb-5">
+                  Mode lokal aktif. Data dan akun disimpan di browser ini.
+                </p>
+              )}
               
               <form onSubmit={handleLogin} className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                       <Mail className="w-4 h-4" />
@@ -220,18 +260,18 @@ export function Login() {
                       onChange={e => setLoginEmail(e.target.value)}
                       placeholder="email@contoh.com"
                       required
-                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition"
+                      className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 bg-slate-50/70 transition"
                     />
                   </div>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-sm font-medium text-gray-700">Password</label>
+                    <label className="block text-sm font-medium text-slate-700">Kata sandi</label>
                     <button
                       type="button"
                       onClick={() => switchMode('forgot-password')}
-                      className="text-sm text-blue-600 font-medium hover:underline"
+                      className="text-sm text-blue-700 font-medium hover:text-blue-800 hover:underline"
                     >
                       Lupa password?
                     </button>
@@ -246,7 +286,7 @@ export function Login() {
                       onChange={e => setLoginPassword(e.target.value)}
                       placeholder="Masukkan password"
                       required
-                      className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 transition"
+                      className="w-full pl-10 pr-10 py-3 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-blue-600/10 focus:border-blue-600 bg-slate-50/70 transition"
                     />
                     <button
                       type="button"
@@ -267,7 +307,7 @@ export function Login() {
                 <button
                   type="submit"
                   disabled={loginLoading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium py-3 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 mt-4"
+                  className="w-full bg-blue-700 hover:bg-blue-800 disabled:bg-blue-400 text-white font-semibold py-3 rounded-xl shadow-lg shadow-blue-900/15 transition-all flex items-center justify-center gap-2 mt-4 focus:outline-none focus:ring-4 focus:ring-blue-600/20"
                 >
                   {loginLoading ? (
                     <>
@@ -278,11 +318,11 @@ export function Login() {
                 </button>
 
                 <div className="text-center pt-4">
-                  <span className="text-sm text-gray-500">Belum punya akun? </span>
+                  <span className="text-sm text-slate-500">Belum punya akun? </span>
                   <button
                     type="button"
                     onClick={() => switchMode('register')}
-                    className="text-sm text-blue-600 font-medium hover:underline"
+                    className="text-sm text-blue-700 font-semibold hover:text-blue-800 hover:underline"
                   >
                     Buat akun baru
                   </button>
@@ -370,7 +410,7 @@ export function Login() {
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Buat Password Baru</h2>
               <p className="text-gray-500 mb-8">
-                Silakan masukkan password baru untuk akun Anda.
+                {isLocalMode ? 'Buat password baru untuk akun lokal Anda.' : 'Silakan masukkan password baru untuk akun Anda.'}
               </p>
 
               {updateSuccess ? (
@@ -463,7 +503,9 @@ export function Login() {
                   </div>
                   <h2 className="text-2xl font-bold text-gray-900 mb-2">Pendaftaran Berhasil!</h2>
                   <p className="text-sm text-gray-500 mb-8">
-                    Silakan cek email <span className="font-medium text-gray-700">{regEmail}</span> untuk memverifikasi akun Anda sebelum login.
+                    {isLocalMode
+                      ? 'Akun lokal Anda sudah siap digunakan. Silakan login dengan email dan password yang baru dibuat.'
+                      : <>Silakan cek email <span className="font-medium text-gray-700">{regEmail}</span> untuk memverifikasi akun Anda sebelum login.</>}
                   </p>
                   <button
                     onClick={() => {
@@ -586,6 +628,14 @@ export function Login() {
                           required
                           className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 transition"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowRegConfirm(!showRegConfirm)}
+                          aria-label={showRegConfirm ? 'Sembunyikan konfirmasi password' : 'Tampilkan konfirmasi password'}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
+                        >
+                          {showRegConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
                     </div>
 
@@ -613,6 +663,7 @@ export function Login() {
             </div>
           )}
 
+        </div>
         </div>
       </div>
     </div>

@@ -31,17 +31,22 @@ export function Layout() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-blue-600">
-            🏥 Apotek Sehat
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Sistem Informasi Apotek</p>
+    <div className="flex h-screen bg-slate-50">
+      <aside className="flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white">
+        <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-700 text-white">
+            <Pill className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold tracking-tight text-slate-900">Apotek Sehat</h1>
+            <p className="mt-0.5 truncate text-xs text-slate-500">Sistem Informasi Apotek</p>
+          </div>
         </div>
 
-        <nav className="p-4 space-y-2 flex-1">
+        <nav aria-label="Navigasi utama" className="flex-1 space-y-1 px-3 py-6">
+          <p className="mb-3 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+            Menu utama
+          </p>
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -49,42 +54,46 @@ export function Layout() {
               <Link
                 key={item.path}
                 to={item.path}
+                aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                  'group flex items-center gap-3 rounded-lg border-l-2 px-3 py-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2',
                   isActive
-                    ? 'bg-blue-50 text-blue-600 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50'
+                    ? 'border-blue-700 bg-blue-50/80 font-semibold text-blue-800'
+                    : 'border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <Icon className={cn(
+                  'h-[18px] w-[18px] shrink-0',
+                  isActive ? 'text-blue-700' : 'text-slate-400 group-hover:text-slate-600'
+                )} />
                 {item.label}
               </Link>
             );
           })}
         </nav>
 
-        {/* User info + logout */}
-        <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center gap-3 px-2 py-2 mb-2">
-            <UserCircle className="h-8 w-8 text-gray-400 shrink-0" />
+        <div className="border-t border-slate-100 p-3">
+          <div className="mb-2 flex items-center gap-3 rounded-lg px-2 py-2">
+            <UserCircle className="h-9 w-9 shrink-0 text-slate-400" />
             <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-800 truncate">{user?.name}</p>
-              <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+              <p className="truncate text-sm font-medium text-slate-800">{user?.name}</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                {user?.role === 'admin' ? 'Administrator' : user?.role === 'kasir' ? 'Kasir' : user?.role}
+              </p>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors"
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-600 transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-[18px] w-[18px]" />
             Keluar
           </button>
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 overflow-auto">
-        <div className="p-8">
+        <div className="p-5 sm:p-8">
           <Outlet />
         </div>
       </main>

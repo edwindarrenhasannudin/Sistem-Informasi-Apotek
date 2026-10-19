@@ -1,9 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const dataMode = import.meta.env.VITE_DATA_MODE;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+if (dataMode && dataMode !== 'local' && dataMode !== 'supabase') {
+  throw new Error('VITE_DATA_MODE harus bernilai "local" atau "supabase".');
+}
+
+export const isLocalMode = dataMode === 'local' || (!dataMode && !supabaseUrl && !supabaseAnonKey);
+
+if (!isLocalMode && (!supabaseUrl || !supabaseAnonKey)) {
+  throw new Error('VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY harus diisi saat menggunakan Supabase.');
+}
+
+export const supabase = isLocalMode ? null : createClient(supabaseUrl!, supabaseAnonKey!);
 
 export type Database = {
   public: {

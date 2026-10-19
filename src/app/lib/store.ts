@@ -1,4 +1,5 @@
-import { supabase } from './supabase';
+import { isLocalMode, supabase } from './supabase';
+import { readLocalDatabase, writeLocalDatabase } from './localDatabase';
 import { Medicine, Transaction, StockMovement } from '../types';
 
 // Helper: map snake_case DB row to camelCase Medicine
@@ -43,7 +44,8 @@ const mapStockMovement = (row: any): StockMovement => ({
 
 // ── MEDICINES ────────────────────────────────────────────────
 export const getMedicines = async (): Promise<Medicine[]> => {
-  const { data, error } = await supabase
+  if (isLocalMode) return readLocalDatabase().medicines.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const { data, error } = await supabase!
     .from('medicines')
     .select('*')
     .order('name');
@@ -52,7 +54,14 @@ export const getMedicines = async (): Promise<Medicine[]> => {
 };
 
 export const addMedicine = async (medicine: Omit<Medicine, 'id'>): Promise<Medicine> => {
-  const { data, error } = await supabase
+  if (isLocalMode) {
+    const database = readLocalDatabase();
+    const created = { ...medicine, id: crypto.randomUUID() };
+    database.medicines.push(created);
+    writeLocalDatabase(database);
+    return created;
+  }
+  const { data, error } = await supabase!
     .from('medicines')
     .insert({
       name: medicine.name,
@@ -71,6 +80,14 @@ export const addMedicine = async (medicine: Omit<Medicine, 'id'>): Promise<Medic
 };
 
 export const updateMedicine = async (id: string, updates: Partial<Medicine>): Promise<void> => {
+  if (isLocalMode) {
+    const database = readLocalDatabase();
+    const medicine = database.medicines.find(item => item.id === id);
+    if (!medicine) throw new Error('Obat tidak ditemukan.');
+    Object.assign(medicine, updates);
+    writeLocalDatabase(database);
+    return;
+  }
   const payload: Record<string, any> = {};
   if (updates.name !== undefined) payload.name = updates.name;
   if (updates.category !== undefined) payload.category = updates.category;
@@ -81,18 +98,25 @@ export const updateMedicine = async (id: string, updates: Partial<Medicine>): Pr
   if (updates.supplier !== undefined) payload.supplier = updates.supplier;
   if (updates.description !== undefined) payload.description = updates.description;
 
-  const { error } = await supabase.from('medicines').update(payload).eq('id', id);
+  const { error } = await supabase!.from('medicines').update(payload).eq('id', id);
   if (error) throw error;
 };
 
 export const deleteMedicine = async (id: string): Promise<void> => {
-  const { error } = await supabase.from('medicines').delete().eq('id', id);
+  if (isLocalMode) {
+    const database = readLocalDatabase();
+    database.medicines = database.medicines.filter(item => item.id !== id);
+    writeLocalDatabase(database);
+    return;
+  }
+  const { error } = await supabase!.from('medicines').delete().eq('id', id);
   if (error) throw error;
 };
 
 // ── TRANSACTIONS ─────────────────────────────────────────────
 export const getTransactions = async (): Promise<Transaction[]> => {
-  const { data, error } = await supabase
+  if (isLocalMode) return readLocalDatabase().transactions.slice().sort((a, b) => b.date.localeCompare(a.date));
+  const { data, error } = await supabase!
     .from('transactions')
     .select('*, transaction_items(*)')
     .order('date', { ascending: false });
@@ -103,8 +127,19 @@ export const getTransactions = async (): Promise<Transaction[]> => {
 export const addTransaction = async (
   transaction: Omit<Transaction, 'id'>
 ): Promise<Transaction> => {
+  if (isLocalMode) {
+    const database = readLocalDatabase();
+    const created = { ...transaction, id: crypto.randomUUID() };
+    database.transactions.push(created);
+    for (const item of transaction.items) {
+      const medicine = database.medicines.find(entry => entry.id === item.medicineId);
+      if (medicine) medicine.stock -= item.quantity;
+    }
+    writeLocalDatabase(database);
+    return created;
+  }
   // Insert transaction header
-  const { data: txData, error: txError } = await supabase
+  const { data: txData, error: txError } = await supabase!
     .from('transactions')
     .insert({
       date: transaction.date,
@@ -125,18 +160,18 @@ export const addTransaction = async (
     price: item.price,
     subtotal: item.subtotal,
   }));
-  const { error: itemsError } = await supabase.from('transaction_items').insert(items);
+  const { error: itemsError } = await supabase!.from('transaction_items').insert(items);
   if (itemsError) throw itemsError;
 
   // Decrease stock for each item
   for (const item of transaction.items) {
-    const { data: med } = await supabase
+    const { data: med } = await supabase!
       .from('medicines')
       .select('stock')
       .eq('id', item.medicineId)
       .single();
     if (med) {
-      await supabase
+      await supabase!
         .from('medicines')
         .update({ stock: med.stock - item.quantity })
         .eq('id', item.medicineId);
@@ -151,7 +186,8 @@ export const addTransaction = async (
 
 // ── STOCK MOVEMENTS ──────────────────────────────────────────
 export const getStockMovements = async (): Promise<StockMovement[]> => {
-  const { data, error } = await supabase
+  if (isLocalMode) return readLocalDatabase().stockMovements.slice().sort((a, b) => b.date.localeCompare(a.date));
+  const { data, error } = await supabase!
     .from('stock_movements')
     .select('*')
     .order('date', { ascending: false });
@@ -162,7 +198,18 @@ export const getStockMovements = async (): Promise<StockMovement[]> => {
 export const addStockMovement = async (
   movement: Omit<StockMovement, 'id'>
 ): Promise<StockMovement> => {
-  const { data, error } = await supabase
+  if (isLocalMode) {
+    const database = readLocalDatabase();
+    const created = { ...movement, id: crypto.randomUUID() };
+    database.stockMovements.push(created);
+    const medicine = database.medicines.find(entry => entry.id === movement.medicineId);
+    if (medicine) {
+      medicine.stock += movement.type === 'in' ? movement.quantity : -movement.quantity;
+    }
+    writeLocalDatabase(database);
+    return created;
+  }
+  const { data, error } = await supabase!
     .from('stock_movements')
     .insert({
       medicine_id: movement.medicineId,
@@ -177,7 +224,7 @@ export const addStockMovement = async (
   if (error) throw error;
 
   // Update medicine stock
-  const { data: med } = await supabase
+  const { data: med } = await supabase!
     .from('medicines')
     .select('stock')
     .eq('id', movement.medicineId)
@@ -186,7 +233,7 @@ export const addStockMovement = async (
     const newStock = movement.type === 'in'
       ? med.stock + movement.quantity
       : med.stock - movement.quantity;
-    await supabase
+    await supabase!
       .from('medicines')
       .update({ stock: newStock })
       .eq('id', movement.medicineId);
